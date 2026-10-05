@@ -1,0 +1,163 @@
+{
+  "title": "Salestorm Load Test",
+  "uid": "salestorm-loadtest",
+  "schemaVersion": 38,
+  "version": 3,
+  "refresh": "5s",
+  "time": { "from": "now-5m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requests Per Second (RPS) by Endpoint",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{handler=~\"/v1/.*|/admin/.*\"}[10s])) by (handler)",
+          "legendFormat": "{{ handler }}",
+          "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 2,
+      "title": "P50 / P95 / P99 Latency",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_highr_seconds_bucket[10s])) by (le))",
+          "legendFormat": "p50", "datasource": "Prometheus"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket[10s])) by (le))",
+          "legendFormat": "p95", "datasource": "Prometheus"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_highr_seconds_bucket[10s])) by (le))",
+          "legendFormat": "p99", "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "color": { "mode": "palette-classic" } }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Stock Levels (Available / Reserved / Sold)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        { "expr": "salestorm_stock_available", "legendFormat": "Available", "datasource": "Prometheus" },
+        { "expr": "salestorm_stock_reserved",  "legendFormat": "Reserved",  "datasource": "Prometheus" },
+        { "expr": "salestorm_stock_sold",      "legendFormat": "Sold",      "datasource": "Prometheus" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "color": { "mode": "palette-classic" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Available" }, "properties": [{ "id": "color", "value": { "fixedColor": "green",  "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Reserved" },  "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "Sold" },      "properties": [{ "id": "color", "value": { "fixedColor": "red",    "mode": "fixed" } }] }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "title": "HTTP Error Rate (4xx / 5xx)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status_code=~\"4..\", handler=~\"/v1/.*\"}[10s]))",
+          "legendFormat": "4xx errors", "datasource": "Prometheus"
+        },
+        {
+          "expr": "sum(rate(http_requests_total{status_code=~\"5..\", handler=~\"/v1/.*\"}[10s]))",
+          "legendFormat": "5xx errors", "datasource": "Prometheus"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "4xx errors" }, "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }] },
+          { "matcher": { "id": "byName", "options": "5xx errors" }, "properties": [{ "id": "color", "value": { "fixedColor": "red",    "mode": "fixed" } }] }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "title": "Total Requests",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 16, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "graphMode": "area",
+        "colorMode": "background"
+      },
+      "targets": [
+        { "expr": "sum(http_requests_total{handler=~\"/v1/.*\"})", "legendFormat": "Total", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 6,
+      "title": "Current RPS",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 16, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "graphMode": "area",
+        "colorMode": "background"
+      },
+      "targets": [
+        { "expr": "sum(rate(http_requests_total{handler=~\"/v1/.*\"}[10s]))", "legendFormat": "RPS", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 7,
+      "title": "Items Sold",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 16, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "graphMode": "area",
+        "colorMode": "background",
+        "orientation": "auto"
+      },
+      "targets": [
+        { "expr": "salestorm_stock_sold", "legendFormat": "Sold", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "red", "mode": "fixed" }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Items Available",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 16, "w": 6, "h": 4 },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "graphMode": "area",
+        "colorMode": "background",
+        "orientation": "auto"
+      },
+      "targets": [
+        { "expr": "salestorm_stock_available", "legendFormat": "Available", "datasource": "Prometheus" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "green", "mode": "fixed" }
+        }
+      }
+    }
+  ]
+}

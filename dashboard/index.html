@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Salestorm Dashboard</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .card { border: 1px solid #ccc; padding: 15px; margin: 10px; display: inline-block; vertical-align: top;}
+    .green { background: #d4edda; }
+    .red { background: #f8d7da; }
+    .badge { padding: 5px; border-radius: 3px; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <h1>Salestorm Dashboard</h1>
+  <div class="card">
+    <h3>Inventory</h3>
+    <p>Available: <span id="available"></span></p>
+    <p>Reserved: <span id="reserved"></span></p>
+    <p>Sold: <span id="sold"></span></p>
+    <p>Redis Stock: <span id="redis_stock"></span></p>
+  </div>
+  <div class="card">
+    <h3>Invariants</h3>
+    <p>sold <= total: <span id="inv_sold_le_total" class="badge"></span></p>
+    <p>available >= 0: <span id="inv_available_ge_0" class="badge"></span></p>
+    <p>sum == total: <span id="inv_sum_equals_total" class="badge"></span></p>
+  </div>
+  <div class="card">
+    <h3>Reservations</h3>
+    <pre id="reservations"></pre>
+  </div>
+  <div class="card">
+    <h3>System</h3>
+    <p>API Instance: <span id="api_instance"></span></p>
+    <button onclick="reset()">Reset DB</button>
+  </div>
+
+  <script>
+    async function fetchStats() {
+      try {
+        const res = await fetch('/admin/stats');
+        const data = await res.json();
+        
+        document.getElementById('available').innerText = data.available;
+        document.getElementById('reserved').innerText = data.reserved;
+        document.getElementById('sold').innerText = data.sold;
+        document.getElementById('redis_stock').innerText = data.redis_stock;
+        
+        document.getElementById('api_instance').innerText = data.api_instance;
+        document.getElementById('reservations').innerText = JSON.stringify(data.reservations, null, 2);
+
+        const setInv = (id, val) => {
+          const el = document.getElementById(id);
+          el.innerText = val ? 'PASS' : 'FAIL';
+          el.className = 'badge ' + (val ? 'green' : 'red');
+        };
+        
+        if (data.invariants) {
+            setInv('inv_sold_le_total', data.invariants.sold_le_total);
+            setInv('inv_available_ge_0', data.invariants.available_ge_0);
+            setInv('inv_sum_equals_total', data.invariants.sum_equals_total);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function reset() {
+      await fetch('/admin/reset', {method: 'POST'});
+    }
+
+    setInterval(fetchStats, 500);
+  </script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: salestorm
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d salestorm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    environment:
+      - DB_DSN=postgresql://postgres:password@db:5432/salestorm
+      - REDIS_URL=redis://redis:6379/0
+      - PSP_URL=http://mock_psp:8001
+      - NAIVE_MODE=false
+      - RESERVATION_TTL=60
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000"   # dynamic access, or just let Nginx handle it
+
+  mock_psp:
+    build: .
+    command: ["uvicorn", "mock_psp.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      - PORT=8001
+    ports:
+      - "8001:8001"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dashboard:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+
+  # ── Monitoring Stack ─────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=1h"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  # ── Load Test (run with: docker compose --profile load up locust) ────────────
+
+  locust:
+    image: locustio/locust
+    profiles: ["load"]
+    ports:
+      - "8089:8089"
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: -f /mnt/locust/locustfile.py --host http://nginx:8080
+    depends_on:
+      - nginx
+
+  # Locust workers for distributed load (scale up with --scale locust-worker=N)
+  locust-worker:
+    image: locustio/locust
+    profiles: ["load"]
+    volumes:
+      - ./loadtest:/mnt/locust
+    command: -f /mnt/locust/locustfile.py --worker --master-host locust
+    depends_on:
+      - locust
